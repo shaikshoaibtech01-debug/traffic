@@ -355,6 +355,8 @@ def debug_columns():
         return jsonify({"message": f"Error: {str(e)}"}), 500
 
 if __name__ == "__main__":
+    import os
+    port = int(os.environ.get("PORT", 5000))  # Use Render’s assigned port
     print("Starting Flask server...")
     print(f"Excel file will be saved as: {FILE_PATH}")
-    app.run(debug=True, host='127.0.0.1', port=5000)
+    app.run(debug=True, host="0.0.0.0", port=port)
