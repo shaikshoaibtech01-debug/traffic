@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Direction-Based Counter</title>
+  <style>
+    :root {
+      --bg-color: #263238;
+      --text-color: #fff;
+      --counter-bg: #37474F;
+      --button-bg: #4caf50;
+      --button-hover: #388e3c;
+      --input-bg: #455A64;
+      --input-border: #546E7A;
+      --highlight-color: #f44336;
+    }
+    body { font-family: Arial, sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 1rem; overflow: hidden; }
+    h1 { font-size: 1.2rem; color: var(--highlight-color); text-align: center; margin: 0.2rem 0; position: fixed; top: 5px; left: 50%; transform: translateX(-50%); z-index: 10; }
+    .category { margin: 10px 0 5px; font-size: 1.2rem; font-weight: bold; color: var(--highlight-color); }
+    .counter-box { display: flex; gap: 1rem; flex-wrap: nowrap; justify-content: flex-start; }
+    .counter { background: var(--counter-bg); padding: 20px; border-radius: 10px; text-align: center; min-width: 140px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2); }
+    .counter h2 { margin-bottom: 10px; font-size: 1.2rem; color: var(--text-color); }
+    .counter:hover { background-color: #ff9800; }
+    button { padding: 10px 20px; font-size: 1rem; margin-top: 10px; cursor: pointer; background-color: var(--button-bg); color: var(--text-color); border: none; border-radius: 5px; }
+    button:hover { background-color: var(--button-hover); }
+    .time-period-container { margin: 10px 0; text-align: left; }
+    .time-period-container input, .time-period-container select { padding: 8px; margin: 5px; font-size: 1rem; background-color: var(--input-bg); color: var(--text-color); border: 2px solid var(--input-border); border-radius: 5px; }
+    .theme-selector { position: fixed; top: 10px; right: 10px; background-color: var(--input-bg); padding: 10px; border-radius: 5px; }
+    .theme-selector select { padding: 8px; background-color: var(--input-bg); color: var(--text-color); border: 1px solid var(--input-border); border-radius: 5px; }
+    #videoContainer { resize: both; overflow: auto; width: 600px; height: 350px; border: 2px solid #ccc; margin: 0 auto; }
+    #mpcPlayer { width: 100%; height: 100%; }
+    #speedDisplay { color: yellow; font-weight: bold; margin-top: 5px; }
+    .status-message { position: fixed; top: 50px; left: 50%; transform: translateX(-50%); background: var(--button-bg); color: white; padding: 10px 20px; border-radius: 5px; z-index: 1000; display: none; }
+    .error { background-color: #f44336 !important; }
+    .success { background-color: #4caf50 !important; }
+  </style>
+</head>
+<body>
+<h1>Direction-Based Counter</h1>
+
+<div id="statusMessage" class="status-message"></div>
+
+<div class="theme-selector">
+  <select onchange="changeTheme(this.value)">
+    <option value="dark">Dark</option>
+    <option value="blue-grey">Blue Grey</option>
+  </select><br><br>
+  <button id="lockButton" onclick="toggleVideoResize()" style="width: 100%;">🔓</button><br><br>
+  <button onclick="createTemplate()" style="width: 100%;">📄 Create Template</button><br><br>
+  <button onclick="checkPeriods()" style="width: 100%;">🔍 Check Periods</button><br><br>
+  <button onclick="debugColumns()" style="width: 100%;">🛠️ Debug Columns</button>
+</div>
+
+<!-- LEFT SECTION -->
+<div style="position: fixed; bottom: 20px; left: 20px; display: flex; flex-direction: column; align-items: flex-start;">
+  <label><strong>Choose Video File:</strong><br>
+    <input type="file" id="videoFileInput" accept="video/*">
+  </label>
+  <button onclick="addPrevious15Minutes()">Prev 15 Mins</button>
+
+  <div class="time-period-container">
+    <label for="startTime">Period Start:</label><br>
+    <input type="time" id="startTime" onchange="updatePeriodDisplay()"><br>
+    <label for="endTime">Period End:</label><br>
+    <input type="time" id="endTime" onchange="updatePeriodDisplay()">
+  </div>
+  <p><strong>Selected Period:</strong><br><span id="timePeriodDisplay">Not Set</span></p>
+
+  <div class="category">Light Vehicle</div>
+  <div class="counter-box">
+    <div class="counter"><h2>U-Turn (↓)</h2><div id="lightUCount">0</div><button onclick="lightUCount=0;updateCounts()">Reset</button></div>
+    <div class="counter"><h2>Right Turn (→)</h2><div id="lightRightCount">0</div><button onclick="lightRightCount=0;updateCounts()">Reset</button></div>
+    <div class="counter"><h2 id="lightStraightLabel">Straight (↑)</h2><div id="lightStraightCount">0</div><button onclick="lightStraightCount=0;updateCounts()">Reset</button></div>
+    <div class="counter"><h2>Left Turn (←)</h2><div id="lightLeftCount">0</div><button onclick="lightLeftCount=0;updateCounts()">Reset</button></div>
+  </div>
+</div>
+
+<!-- RIGHT SECTION -->
+<div style="position: fixed; bottom: 20px; right: 20px; display: flex; flex-direction: column; align-items: flex-end;">
+  <button onclick="addNext15Minutes()">Next 15 Mins</button>
+  <div class="time-period-container">
+    <label for="approach">Select Approach:</label><br>
+    <select id="approach" onchange="updateStraightDirection(); updatePeriodDisplay();">
+      <option value="">-- Select --</option>
+      <option value="North">North</option>
+      <option value="South">South</option>
+      <option value="East">East</option>
+      <option value="West">West</option>
+    </select>
+  </div>
+  <p><strong>Selected Approach:</strong><br><span id="selectedApproach">Not Set</span></p>
+  <p><strong>Straight Movement:</strong><br><span id="straightDirectionDisplay">Not Set</span></p>
+
+  <div class="category">Heavy Vehicle</div>
+  <div class="counter-box">
+    <div class="counter"><h2>U-Turn (S)</h2><div id="heavyUCount">0</div><button onclick="heavyUCount=0;updateCounts()">Reset</button></div>
+    <div class="counter"><h2>Right Turn (D)</h2><div id="heavyRightCount">0</div><button onclick="heavyRightCount=0;updateCounts()">Reset</button></div>
+    <div class="counter"><h2 id="heavyStraightLabel">Straight (W)</h2><div id="heavyStraightCount">0</div><button onclick="heavyStraightCount=0;updateCounts()">Reset</button></div>
+    <div class="counter"><h2>Left Turn (A)</h2><div id="heavyLeftCount">0</div><button onclick="heavyLeftCount=0;updateCounts()">Reset</button></div>
+  </div>
+</div>
+
+<div style="position: fixed; top: 40%; left: 50%; transform: translate(-50%, -50%); text-align: center;">
+  <div id="videoContainer">
+    <video id="mpcPlayer" controls>
+      <source src="" type="video/mp4">
+      Your browser does not support the video tag.
+    </video>
+  </div>
+</div>
+
+<div style="position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); text-align: center;">
+  <div style="margin-bottom: 5px;">
+    <button onclick="seekVideo(-5)">⏪</button>
+    <button onclick="seekVideo(5)">⏩</button>
+  </div>
+  <div style="margin-bottom: 10px;">
+    <button onclick="changePlaybackSpeed(0.5)" onmouseover="showSpeed()" onmouseout="hideSpeed()">🐢</button>
+    <button onclick="changePlaybackSpeed(2)" onmouseover="showSpeed()" onmouseout="hideSpeed()">🚀</button>
+  </div>
+  <p id="speedDisplay"></p>
+  <button onclick="resetAllCounts()">Reset All</button>
+  <button onclick="saveToServer()">💾 Save to Excel</button>
+</div>
+
+<script>
+  let lightUCount=0,lightRightCount=0,lightStraightCount=0,lightLeftCount=0;
+  let heavyUCount=0,heavyRightCount=0,heavyStraightCount=0,heavyLeftCount=0;
+  const video=document.getElementById('mpcPlayer');
+
+  document.addEventListener('keydown',function(event){
+    switch(event.code){
+      case 'ArrowUp': lightStraightCount++; break;
+      case 'ArrowRight': lightRightCount++; break;
+      case 'ArrowLeft': lightLeftCount++; break;
+      case 'ArrowDown': lightUCount++; break;
+      case 'KeyW': heavyStraightCount++; break;
+      case 'KeyD': heavyRightCount++; break;
+      case 'KeyA': heavyLeftCount++; break;
+      case 'KeyS': heavyUCount++; break;
+      case 'Space': event.preventDefault(); video.paused?video.play():video.pause(); return;
+    }
+    if(['ArrowUp','ArrowRight','ArrowLeft','ArrowDown'].includes(event.code)) event.preventDefault();
+    updateCounts();
+  });
+
+  document.getElementById('videoFileInput').addEventListener('change',function(e){
+    const file=e.target.files[0];
+    if(file){ video.src=URL.createObjectURL(file); video.load(); video.playbackRate=1; }
+  });
+
+  function updateCounts(){
+    document.getElementById('lightUCount').textContent=lightUCount;
+    document.getElementById('lightRightCount').textContent=lightRightCount;
+    document.getElementById('lightStraightCount').textContent=lightStraightCount;
+    document.getElementById('lightLeftCount').textContent=lightLeftCount;
+    document.getElementById('heavyUCount').textContent=heavyUCount;
+    document.getElementById('heavyRightCount').textContent=heavyRightCount;
+    document.getElementById('heavyStraightCount').textContent=heavyStraightCount;
+    document.getElementById('heavyLeftCount').textContent=heavyLeftCount;
+  }
+
+  function updatePeriodDisplay(){
+    const start=document.getElementById('startTime').value;
+    const end=document.getElementById('endTime').value;
+    const approach=document.getElementById('approach').value;
+    document.getElementById('timePeriodDisplay').textContent=start&&end?`From ${start} to ${end}`:'Not Set';
+    document.getElementById('selectedApproach').textContent=approach||'Not Set';
+  }
+
+  function updateStraightDirection(){
+    const approach=document.getElementById('approach').value;
+    const display=document.getElementById('straightDirectionDisplay');
+    const lightLabel=document.getElementById('lightStraightLabel');
+    const heavyLabel=document.getElementById('heavyStraightLabel');
+    const opposite={North:"SB",South:"NB",East:"WB",West:"EB"};
+    if(approach&&opposite[approach]){
+      display.textContent=`${opposite[approach]}`;
+      lightLabel.textContent=`Straight (${opposite[approach]}) (↑ Arrow)`;
+      heavyLabel.textContent=`Straight (${opposite[approach]}) (W key)`;
+    } else {
+      display.textContent=`Not Set`;
+      lightLabel.textContent=`Straight (↑ Arrow)`;
+      heavyLabel.textContent=`Straight (W key)`;
+    }
+  }
+
+  function addPrevious15Minutes(){
+    const start=document.getElementById('startTime'); const end=document.getElementById('endTime');
+    if(!start.value||!end.value) return;
+    let s=new Date(`1970-01-01T${start.value}`); let e=new Date(`1970-01-01T${end.value}`);
+    s.setMinutes(s.getMinutes()-15); e.setMinutes(e.getMinutes()-15);
+    start.value=s.toTimeString().slice(0,5); end.value=e.toTimeString().slice(0,5); updatePeriodDisplay();
+  }
+  function addNext15Minutes(){
+    const start=document.getElementById('startTime'); const end=document.getElementById('endTime');
+    if(!start.value||!end.value) return;
+    let s=new Date(`1970-01-01T${start.value}`); let e=new Date(`1970-01-01T${end.value}`);
+    s.setMinutes(s.getMinutes()+15); e.setMinutes(e.getMinutes()+15);
+    start.value=s.toTimeString().slice(0,5); end.value=e.toTimeString().slice(0,5); updatePeriodDisplay();
+  }
+
+  function changePlaybackSpeed(factor){
+    if(video){ let newRate=video.playbackRate*factor; video.playbackRate=Math.min(Math.max(newRate,0.25),8); showSpeed(); }
+  }
+  function seekVideo(seconds){ if(video&&video.duration){ video.currentTime=Math.min(Math.max(0,video.currentTime+seconds),video.duration); } }
+  function showSpeed(){ if(video){ document.getElementById('speedDisplay').textContent=`Current Speed: ${video.playbackRate.toFixed(2)}x`; } }
+  function hideSpeed(){ document.getElementById('speedDisplay').textContent=''; }
+  function resetAllCounts(){ lightUCount=lightRightCount=lightStraightCount=lightLeftCount=0; heavyUCount=heavyRightCount=heavyStraightCount=heavyLeftCount=0; updateCounts(); }
+
+  function showMessage(message, isError = false) {
+    const msgElement = document.getElementById('statusMessage');
+    msgElement.textContent = message;
+    msgElement.className = `status-message ${isError ? 'error' : 'success'}`;
+    msgElement.style.display = 'block';
+    setTimeout(() => { msgElement.style.display = 'none'; }, 5000);
+  }
+
+  function toggleVideoResize() {
+    const container = document.getElementById("videoContainer");
+    const lockButton = document.getElementById("lockButton");
+    container.style.resize = container.style.resize === "none" ? "both" : "none";
+    lockButton.textContent = container.style.resize === "none" ? "🔒" : "🔓";
+  }
+
+  function changeTheme(theme) {
+    const root = document.documentElement;
+    if (theme === 'blue-grey') {
+      root.style.setProperty('--bg-color', '#37474F');
+      root.style.setProperty('--counter-bg', '#455A64');
+      root.style.setProperty('--input-bg', '#546E7A');
+    } else {
+      root.style.setProperty('--bg-color', '#263238');
+      root.style.setProperty('--counter-bg', '#37474F');
+      root.style.setProperty('--input-bg', '#455A64');
+    }
+  }
+
+  // 💾 Save to Flask/Excel
+  function saveToServer(){
+    const startTime = document.getElementById('startTime').value;
+    const endTime = document.getElementById('endTime').value;
+    const approach = document.getElementById('approach').value;
+    
+    // Debug logging - this will help us see what's happening
+    console.log('=== SAVE DEBUG INFO ===');
+    console.log('Start Time value:', startTime);
+    console.log('End Time value:', endTime);
+    console.log('Approach value:', approach);
+    console.log('Start Time element exists:', !!document.getElementById('startTime'));
+    console.log('End Time element exists:', !!document.getElementById('endTime'));
+    console.log('Approach element exists:', !!document.getElementById('approach'));
+    
+    // More detailed validation with specific error messages
+    if (!startTime) {
+      showMessage('Please set the start time!', true);
+      console.log('ERROR: Start time is missing');
+      return;
+    }
+    
+    if (!endTime) {
+      showMessage('Please set the end time!', true);
+      console.log('ERROR: End time is missing');
+      return;
+    }
+    
+    if (!approach) {
+      showMessage('Please select an approach!', true);
+      console.log('ERROR: Approach is not selected');
+      return;
+    }
+
+    const period = `From ${startTime} to ${endTime}`;
+    
+    const data={
+      light:{uTurn:lightUCount,right:lightRightCount,straight:lightStraightCount,left:lightLeftCount},
+      heavy:{uTurn:heavyUCount,right:heavyRightCount,straight:heavyStraightCount,left:heavyLeftCount},
+      period: period,
+      approach: approach
+    };
+    
+    console.log('Final data being sent:', JSON.stringify(data, null, 2));
+    
+    showMessage('Sending data to server...', false);
+    
+    fetch("http://127.0.0.1:5000/save",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(data)})
+      .then(res=>res.json())
+      .then(response => {
+        console.log('=== SERVER RESPONSE ===');
+        console.log('Full response:', response);
+        
+        if (response.details) {
+          console.log('Save details:', response.details);
+          console.log('Light cells updated:', response.details.light_cells);
+          console.log('Heavy cells updated:', response.details.heavy_cells);
+        }
+        
+        const isError = response.message.includes('Error') || response.message.includes('could not') || response.message.includes('Please');
+        showMessage(response.message, isError);
+      })
+      .catch(err=>{
+        console.error("Network Error:",err);
+        showMessage('Failed to connect to server. Make sure Flask is running on port 5000!', true);
+      });
+  }
+
+  // Create Excel template
+  function createTemplate() {
+    showMessage('Creating Excel template...', false);
+    fetch("http://127.0.0.1:5000/create-template", {method:"POST"})
+      .then(res=>res.json())
+      .then(response => {
+        console.log('Create template response:', response);
+        showMessage(response.message, response.message.includes('Error'));
+      })
+      .catch(err=>{
+        console.error("Error:",err);
+        showMessage('❌ Failed to connect to server!', true);
+      });
+  }
+
+  // Check what time periods are in Excel
+  function checkPeriods() {
+    fetch("http://127.0.0.1:5000/check-periods", {method:"GET"})
+      .then(res=>res.json())
+      .then(response => {
+        console.log('=== EXCEL TIME PERIODS ===');
+        console.log(response);
+        if (response.periods) {
+          response.periods.forEach(period => {
+            console.log(`Row ${period.row}: ${period.period_string}`);
+          });
+        }
+        showMessage(`Found ${response.periods ? response.periods.length : 0} time periods. Check console for details.`, false);
+      })
+      .catch(err=>{
+        console.error("Error:",err);
+        showMessage('❌ Failed to connect to server!', true);
+      });
+  }
+
+  // Debug column mappings
+  function debugColumns() {
+    fetch("http://127.0.0.1:5000/debug-columns", {method:"GET"})
+      .then(res=>res.json())
+      .then(response => {
+        console.log('=== COLUMN MAPPINGS DEBUG ===');
+        console.log('Light Vehicles:');
+        Object.entries(response.light_vehicles).forEach(([approach, cols]) => {
+          console.log(`  ${approach}: ${cols.join(', ')}`);
+        });
+        console.log('Heavy Vehicles:');
+        Object.entries(response.heavy_vehicles).forEach(([approach, cols]) => {
+          console.log(`  ${approach}: ${cols.join(', ')}`);
+        });
+        showMessage('Column mappings logged to console', false);
+      })
+      .catch(err=>{
+        console.error("Error:",err);
+        showMessage('❌ Failed to connect to server!', true);
+      });
+  }
+
+  // Initialize display
+  updateCounts();
+  updatePeriodDisplay();
+</script>
+</body>
+</html>
